@@ -2,11 +2,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
+from app.core.jwt import create_access_token
 from app.core.security import hash_password
+from app.core.security import verify_password
 from app.db.session import get_db
 from app.models.member import Member
-from app.schema.request.auth import RegisterRequest
-from app.schema.response.auth import RegisterResponse, RegisterResponseData
+from app.schema.request.auth import LoginRequest, RegisterRequest
+from app.schema.response.auth import (
+    LoginResponse,
+    LoginResponseData,
+    RegisterResponse,
+    RegisterResponseData,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -65,5 +72,35 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db)):
             id=user.id,
             name=user.name,
             email=user.email,
+        ),
+    )
+
+
+@router.post("/login", response_model=LoginResponse)
+def login_user(payload: LoginRequest, db: Session = Depends(get_db)):
+    email = payload.email.strip().lower()
+    password = payload.password.strip()
+
+    user = db.query(Member).filter(Member.email == email).first()
+    if not user or not verify_password(password, user.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
+
+    access_token = create_access_token(
+        subject=str(user.id),
+        user_id=user.id,
+        email=user.email,
+    )
+
+    return LoginResponse(
+        status=200,
+        message="user login successful",
+        data=LoginResponseData(
+            id=user.id,
+            name=user.name,
+            email=user.email,
+            access_token=access_token,
         ),
     )
