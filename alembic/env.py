@@ -22,7 +22,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.db.base import Base
-from app.db import models  # Ensures models are loaded and registered
+from app import models  # Ensures models are loaded and registered
 from app.core.config import settings
 
 target_metadata = Base.metadata
