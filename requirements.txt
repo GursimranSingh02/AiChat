@@ -17,3 +17,4 @@ langchain-core
 langchain-community
 langgraph-checkpoint
 langgraph-checkpoint-postgres
+langchain-google-genai

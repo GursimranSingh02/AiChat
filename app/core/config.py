@@ -13,4 +13,8 @@ class Settings:
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     TOKEN_VALIDITY_DAYS: int = int(os.getenv("TOKEN_VALIDITY_DAYS", 7))
 
+    GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY")
+
+    ACCESS_PAST_MESSAGES_COUNT: int = int(os.getenv("ACCESS_PAST_MESSAGES_COUNT", 5))
+
 settings = Settings()
