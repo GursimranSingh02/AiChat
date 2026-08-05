@@ -40,6 +40,11 @@ def login_page():
     return HTMLResponse(render_frontend_page("login.html"))
 
 
+@app.get("/chat", include_in_schema=False)
+def chat_page():
+    return HTMLResponse(render_frontend_page("chat.html"))
+
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(

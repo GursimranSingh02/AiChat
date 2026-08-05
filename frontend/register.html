@@ -158,9 +158,9 @@
           event.preventDefault();
 
           const payload = Object.fromEntries(new FormData(form).entries());
+          const originalText = submitButton.textContent;
 
           try {
-            const originalText = submitButton.textContent;
             submitButton.disabled = true;
             submitButton.textContent = "Please wait...";
             setStatus("Submitting request...", "info");

@@ -155,9 +155,9 @@
           event.preventDefault();
 
           const payload = Object.fromEntries(new FormData(form).entries());
+          const originalText = submitButton.textContent;
 
           try {
-            const originalText = submitButton.textContent;
             submitButton.disabled = true;
             submitButton.textContent = "Please wait...";
             setStatus("Submitting request...", "info");
@@ -182,6 +182,9 @@
             }
 
             setStatus(data.message || "Login successful.", "success");
+            window.setTimeout(() => {
+              window.location.href = "/chat";
+            }, 700);
           } catch (error) {
             setStatus(error.message || "Something went wrong.", "error");
           } finally {

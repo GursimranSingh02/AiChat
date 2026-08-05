@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AiChat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/frontend/assets/app.css" />
+  </head>
+  <body class="page-fade text-slate-100">
+    <main class="min-h-screen overflow-hidden">
+      <div class="absolute inset-0 soft-grid opacity-25"></div>
+      <div class="absolute -top-28 left-16 h-72 w-72 rounded-full bg-sky-500/20 blur-3xl"></div>
+      <div class="absolute -bottom-28 right-12 h-96 w-96 rounded-full bg-cyan-400/10 blur-3xl"></div>
+
+      <section class="relative grid min-h-screen lg:grid-cols-[320px_1fr]">
+        <aside class="glass-panel flex min-h-0 flex-col border-r border-white/10 bg-slate-950/55">
+          <div class="border-b border-white/10 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-xs uppercase tracking-[0.3em] text-slate-400">AiChat</p>
+                <h1 class="mt-2 text-xl font-semibold text-white">Sessions</h1>
+              </div>
+              <button
+                id="new-chat"
+                class="rounded-xl border border-sky-400/20 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-500/20"
+                type="button"
+              >
+                New chat
+              </button>
+            </div>
+          </div>
+
+          <div class="border-b border-white/10 p-4">
+            <div id="sidebar-status" class="text-sm text-slate-400">Loading sessions...</div>
+          </div>
+
+          <div
+            id="thread-list"
+            class="min-h-0 flex-1 space-y-2 overflow-y-auto p-3"
+          ></div>
+        </aside>
+
+        <section class="relative flex min-h-screen min-w-0 flex-col">
+          <header class="border-b border-white/10 bg-slate-950/30 px-4 py-4 sm:px-6">
+            <div class="flex items-center justify-between gap-4">
+              <div>
+                <p class="text-xs uppercase tracking-[0.3em] text-slate-400">Current conversation</p>
+                <h2 id="active-thread-title" class="mt-1 text-lg font-semibold text-white">New chat</h2>
+              </div>
+              <button
+                id="logout"
+                type="button"
+                class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+              >
+                Logout
+              </button>
+            </div>
+          </header>
+
+          <div class="flex min-h-0 flex-1 flex-col px-4 py-4 sm:px-6">
+            <div
+              id="chat-panel"
+              class="glass-panel min-h-0 flex-1 overflow-y-auto rounded-3xl border border-white/10 bg-slate-950/45 p-4 sm:p-6"
+            >
+              <div id="empty-state" class="mx-auto flex max-w-2xl flex-col items-center justify-center py-20 text-center">
+                <div class="rounded-full border border-sky-400/20 bg-sky-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-sky-200">
+                  Start here
+                </div>
+                <h3 class="mt-6 text-3xl font-semibold text-white">Ask anything</h3>
+                <p class="mt-3 max-w-lg text-sm leading-6 text-slate-300">
+                  Your first message creates a new conversation thread. Previous sessions stay in the sidebar.
+                </p>
+              </div>
+              <div id="message-list" class="space-y-4"></div>
+            </div>
+
+            <form
+              id="composer"
+              class="mt-4 rounded-3xl border border-white/10 bg-slate-950/55 p-3 shadow-2xl shadow-slate-950/20"
+            >
+              <div class="flex items-end gap-3">
+                <textarea
+                  id="query"
+                  rows="1"
+                  class="max-h-48 min-h-[56px] flex-1 resize-none rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-4 text-sm text-white outline-none placeholder:text-slate-500"
+                  placeholder="Message AiChat..."
+                ></textarea>
+                <button
+                  id="send-button"
+                  type="submit"
+                  class="rounded-2xl bg-sky-500 px-5 py-4 text-sm font-semibold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Send
+                </button>
+              </div>
+              <p id="composer-status" class="mt-2 px-1 text-xs text-slate-400"></p>
+            </form>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      window.__BACKEND_URL__ = "{{BACKEND_URL}}";
+    </script>
+    <script>
+      (function () {
+        const backendUrl = String(window.__BACKEND_URL__ || "").replace(/\/$/, "");
+        const token = localStorage.getItem("access_token");
+
+        const threadList = document.getElementById("thread-list");
+        const sidebarStatus = document.getElementById("sidebar-status");
+        const messageList = document.getElementById("message-list");
+        const chatPanel = document.getElementById("chat-panel");
+        const emptyState = document.getElementById("empty-state");
+        const composer = document.getElementById("composer");
+        const queryInput = document.getElementById("query");
+        const sendButton = document.getElementById("send-button");
+        const composerStatus = document.getElementById("composer-status");
+        const activeThreadTitle = document.getElementById("active-thread-title");
+        const newChatButton = document.getElementById("new-chat");
+        const logoutButton = document.getElementById("logout");
+
+        let currentThreadId = null;
+        let currentThreadName = "New chat";
+        let threadsPage = 1;
+        let threadsTotalPages = 1;
+        let threadsLoading = false;
+        let hasMoreThreads = true;
+        let threadInitialized = false;
+
+        function requireAuth() {
+          if (!token) {
+            window.location.href = "/login";
+          }
+        }
+
+        function setSidebarStatus(message) {
+          sidebarStatus.textContent = message;
+        }
+
+        function setComposerStatus(message, tone) {
+          composerStatus.textContent = message;
+          composerStatus.className = "mt-2 px-1 text-xs";
+          composerStatus.classList.add(
+            tone === "error"
+              ? "text-rose-300"
+              : tone === "success"
+                ? "text-emerald-300"
+                : "text-slate-400"
+          );
+        }
+
+        function scrollChatToBottom() {
+          chatPanel.scrollTop = chatPanel.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+          return String(text)
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#039;");
+        }
+
+        function renderMessage(role, text) {
+          const wrapper = document.createElement("div");
+          wrapper.className = `flex ${role === "user" ? "justify-end" : "justify-start"}`;
+
+          const bubble = document.createElement("div");
+          bubble.className =
+            role === "user"
+              ? "max-w-[85%] rounded-3xl rounded-br-md bg-sky-500 px-4 py-3 text-sm leading-6 text-white shadow-lg shadow-sky-950/20"
+              : "max-w-[85%] rounded-3xl rounded-bl-md border border-white/10 bg-slate-900/80 px-4 py-3 text-sm leading-6 text-slate-100";
+          bubble.innerHTML = escapeHtml(text).replace(/\n/g, "<br />");
+
+          wrapper.appendChild(bubble);
+          messageList.appendChild(wrapper);
+        }
+
+        function clearMessages() {
+          messageList.innerHTML = "";
+          emptyState.classList.remove("hidden");
+        }
+
+        function setActiveThread(threadId, threadName) {
+          currentThreadId = threadId;
+          currentThreadName = threadName || "Conversation";
+          activeThreadTitle.textContent = currentThreadName;
+          emptyState.classList.add("hidden");
+        }
+
+        function renderThreadItem(thread, { active = false } = {}) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.dataset.threadId = thread.thread_id;
+          button.dataset.threadName = thread.thread_name;
+          button.className =
+            "w-full rounded-2xl border px-4 py-3 text-left transition " +
+            (active
+              ? "border-sky-400/30 bg-sky-500/15 text-white"
+              : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10");
+
+          button.innerHTML = `
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="truncate text-sm font-semibold">${escapeHtml(thread.thread_name || "Conversation")}</p>
+                <p class="mt-1 text-xs text-slate-400">${escapeHtml(thread.thread_id)}</p>
+              </div>
+              <span class="mt-0.5 rounded-full bg-white/5 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                Chat
+              </span>
+            </div>
+          `;
+
+          button.addEventListener("click", () => openThread(thread.thread_id, thread.thread_name));
+          return button;
+        }
+
+        function clearThreadList() {
+          threadList.innerHTML = "";
+        }
+
+        function upsertThreadToTop(thread) {
+          const existing = threadList.querySelector(`[data-thread-id="${thread.thread_id}"]`);
+          if (existing) {
+            existing.remove();
+          }
+          threadList.prepend(renderThreadItem(thread, { active: thread.thread_id === currentThreadId }));
+        }
+
+        function markActiveThreadInList() {
+          threadList.querySelectorAll("button[data-thread-id]").forEach((button) => {
+            const active = button.dataset.threadId === currentThreadId;
+            button.classList.toggle("border-sky-400/30", active);
+            button.classList.toggle("bg-sky-500/15", active);
+            button.classList.toggle("text-white", active);
+            button.classList.toggle("border-white/10", !active);
+            button.classList.toggle("bg-white/5", !active);
+            button.classList.toggle("text-slate-200", !active);
+          });
+        }
+
+        async function apiFetch(path, options = {}) {
+          const headers = new Headers(options.headers || {});
+          headers.set("Authorization", `Bearer ${token}`);
+          if (options.body && !headers.has("Content-Type")) {
+            headers.set("Content-Type", "application/json");
+          }
+
+          const response = await fetch(`${backendUrl}${path}`, {
+            ...options,
+            headers,
+          });
+
+          const data = await response.json().catch(() => ({}));
+          if (response.status === 401) {
+            localStorage.removeItem("access_token");
+            localStorage.removeItem("member");
+            window.location.href = "/login";
+            throw new Error(data?.message || "Session expired");
+          }
+          if (!response.ok) {
+            throw new Error(data?.message || "Request failed");
+          }
+          return data;
+        }
+
+        async function loadThreads(page, { append = false } = {}) {
+          if (threadsLoading || !hasMoreThreads) {
+            return;
+          }
+
+          threadsLoading = true;
+          setSidebarStatus(append ? "Loading more sessions..." : "Loading sessions...");
+          let shouldPrefetchMore = false;
+
+          try {
+            const data = await apiFetch(`/api/v1/threads?page=${page}&limit=5`, { method: "GET" });
+            const threads = data?.data?.threads || [];
+            threadsTotalPages = data?.data?.total_pages || 1;
+            hasMoreThreads = page < threadsTotalPages;
+
+            if (!append) {
+              clearThreadList();
+            }
+
+            threads.forEach((thread) => {
+              threadList.appendChild(renderThreadItem(thread, { active: thread.thread_id === currentThreadId }));
+            });
+
+            threadsPage = page;
+            setSidebarStatus(threads.length ? "Scroll for older sessions" : "No previous sessions yet");
+            markActiveThreadInList();
+            shouldPrefetchMore = hasMoreThreads && threadList.scrollHeight <= threadList.clientHeight + 8;
+          } catch (error) {
+            setSidebarStatus(error.message || "Unable to load sessions");
+          } finally {
+            threadsLoading = false;
+          }
+
+          if (shouldPrefetchMore) {
+            window.setTimeout(() => {
+              loadThreads(threadsPage + 1, { append: true });
+            }, 0);
+          }
+        }
+
+        async function openThread(threadId, threadName) {
+          setActiveThread(threadId, threadName);
+          clearMessages();
+          emptyState.classList.add("hidden");
+          setComposerStatus("Loading conversation...", "info");
+
+          try {
+            const data = await apiFetch(`/api/v1/thread/${threadId}`, { method: "GET" });
+            const messages = data?.data?.messages || [];
+            messageList.innerHTML = "";
+
+            messages.forEach((item) => {
+              renderMessage("user", item.query);
+              renderMessage("ai", item.response);
+            });
+
+            if (!messages.length) {
+              emptyState.classList.remove("hidden");
+            }
+
+            setComposerStatus("", "info");
+            markActiveThreadInList();
+            scrollChatToBottom();
+          } catch (error) {
+            setComposerStatus(error.message || "Unable to load conversation", "error");
+          }
+        }
+
+        async function sendMessage(query) {
+          const payload = { query };
+          if (currentThreadId) {
+            payload.thread_id = currentThreadId;
+          }
+
+          const data = await apiFetch("/api/v1/chat", {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+
+          return data?.data;
+        }
+
+        function appendUserMessage(text) {
+          emptyState.classList.add("hidden");
+          renderMessage("user", text);
+          scrollChatToBottom();
+        }
+
+        function appendAssistantMessage(text) {
+          renderMessage("ai", text);
+          scrollChatToBottom();
+        }
+
+        composer.addEventListener("submit", async (event) => {
+          event.preventDefault();
+
+          const query = queryInput.value.trim();
+          if (!query) {
+            return;
+          }
+
+          queryInput.value = "";
+          queryInput.style.height = "auto";
+          appendUserMessage(query);
+          setComposerStatus("AiChat is thinking...", "info");
+          sendButton.disabled = true;
+
+          try {
+            const result = await sendMessage(query);
+            if (result?.thread_id) {
+              const thread = {
+                thread_id: result.thread_id,
+                thread_name: result.thread_name || "Conversation",
+              };
+
+              setActiveThread(thread.thread_id, thread.thread_name);
+              upsertThreadToTop(thread);
+              markActiveThreadInList();
+            }
+
+            appendAssistantMessage(result?.response || "");
+            setComposerStatus("", "info");
+          } catch (error) {
+            setComposerStatus(error.message || "Unable to send message", "error");
+          } finally {
+            sendButton.disabled = false;
+          }
+        });
+
+        queryInput.addEventListener("input", () => {
+          queryInput.style.height = "auto";
+          queryInput.style.height = `${Math.min(queryInput.scrollHeight, 192)}px`;
+        });
+
+        threadList.addEventListener("scroll", async () => {
+          const nearBottom = threadList.scrollTop + threadList.clientHeight >= threadList.scrollHeight - 48;
+          if (nearBottom && !threadsLoading && hasMoreThreads) {
+            await loadThreads(threadsPage + 1, { append: true });
+          }
+        });
+
+        newChatButton.addEventListener("click", () => {
+          currentThreadId = null;
+          currentThreadName = "New chat";
+          activeThreadTitle.textContent = "New chat";
+          clearMessages();
+          setComposerStatus("Start a new conversation.", "info");
+          markActiveThreadInList();
+        });
+
+        logoutButton.addEventListener("click", () => {
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("member");
+          window.location.href = "/login";
+        });
+
+        requireAuth();
+        loadThreads(1);
+        setComposerStatus("Ask anything to begin.", "info");
+      })();
+    </script>
+  </body>
+</html>
