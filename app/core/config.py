@@ -14,6 +14,7 @@ class Settings:
     TOKEN_VALIDITY_DAYS: int = int(os.getenv("TOKEN_VALIDITY_DAYS", 7))
 
     GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY")
+    BACKEND_URL: str = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
 
     ACCESS_PAST_MESSAGES_COUNT: int = int(os.getenv("ACCESS_PAST_MESSAGES_COUNT", 5))
 

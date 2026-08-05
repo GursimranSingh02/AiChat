@@ -1,12 +1,43 @@
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
+from app.core.config import settings
 
 app = FastAPI()
+BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_DIR = BASE_DIR / "frontend"
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(api_router)
+app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR), name="frontend")
+
+
+def render_frontend_page(filename: str) -> str:
+    content = (FRONTEND_DIR / filename).read_text(encoding="utf-8")
+    return content.replace("{{BACKEND_URL}}", settings.BACKEND_URL)
+
+
+@app.get("/register", include_in_schema=False)
+def register_page():
+    return HTMLResponse(render_frontend_page("register.html"))
+
+
+@app.get("/login", include_in_schema=False)
+def login_page():
+    return HTMLResponse(render_frontend_page("login.html"))
 
 
 @app.exception_handler(HTTPException)
